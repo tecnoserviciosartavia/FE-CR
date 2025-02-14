@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 from odoo import api, fields, models, _
-from xlrd import open_workbook
+import openpyxl
 import logging
 import base64
 import urllib.request
+from io import BytesIO
 
 _logger = logging.getLogger(__name__)
 
@@ -186,17 +187,14 @@ class CabysCatalogImportWizard(models.TransientModel):
             # get catalog file
             excel_file = base64.b64decode(self.cabys_excel_file)
             _logger.info('Loading Cabys catalog from Excel file')
-            # open it as an xlrd workbook
-            workbook = open_workbook(file_contents=excel_file)
+            # open it as an openpyxl workbook
+            workbook = openpyxl.load_workbook(BytesIO(excel_file))
             _logger.info('workbook %s' % workbook)
             # get first sheet, that's where the data is
-            xl_sheet = workbook.sheet_by_index(0)
-            _logger.info('sheet %s name %s' % (xl_sheet, xl_sheet.name))
+            xl_sheet = workbook.active
+            _logger.info('sheet %s name %s' % (xl_sheet, xl_sheet.title))
             # get rows of data from workbook sheet
-            rows = xl_sheet.get_rows()
-            # skip first two header rows
-            rows.__next__()
-            rows.__next__()
+            rows = xl_sheet.iter_rows(min_row=3, values_only=True)
 
             # here we will keep all categories data and products data
             all_categories = {}
@@ -210,19 +208,19 @@ class CabysCatalogImportWizard(models.TransientModel):
                 # get every subcategory for this row
                 for category_map in categories_map:
                     category = category_map['category']
-                    code = row[category_map['code']].value
-                    description = row[category_map['description']].value
+                    code = row[category_map['code']]
+                    description = row[category_map['description']]
                     if code not in all_categories[category]:
                         vals = {'code': code, 'description': description}
                         if 'subcategory' in category_map:
-                            vals['subcategory'] = row[category_map['subcategory']].value
+                            vals['subcategory'] = row[category_map['subcategory']]
                         all_categories[category][code] = vals
 
                 # process product
-                category = row[products_map['category']].value
-                description = row[products_map['description']].value
-                code = row[products_map['code']].value
-                tax_data = row[products_map['tax']].value
+                category = row[products_map['category']]
+                description = row[products_map['description']]
+                code = row[products_map['code']]
+                tax_data = row[products_map['tax']]
                 tax_converted = 0.0
                 if isinstance(tax_data, str) and '%' in tax_data:
                     # Remueve el símbolo de porcentaje y luego divide por 100
@@ -235,8 +233,8 @@ class CabysCatalogImportWizard(models.TransientModel):
                         tax_converted = 0.0
                 tax = tax_converted
                 
-                first_description = row[products_map['first_description']].value
-                second_description = row[products_map['second_description']].value
+                first_description = row[products_map['first_description']]
+                second_description = row[products_map['second_description']]
                 
                 all_products[code] = {
                     'name': description,
@@ -364,13 +362,13 @@ class CabysCatalogImportWizard(models.TransientModel):
             # get file contents
             excel_file = base64.b64decode(self.cabys_excel_file)
             # open it as an Excel file
-            workbook = open_workbook(file_contents=excel_file)
+            workbook = openpyxl.load_workbook(BytesIO(excel_file))
             # Get first sheet, that's where all the data should be
-            xl_sheet = workbook.sheet_by_index(0)
+            xl_sheet = workbook.active
             # second row has the headers of the file
             # we will check the headers names to infer if this is a Cabys catalog file
             for header in headers_map:
-                cell = xl_sheet.cell(1, header['column'])
+                cell = xl_sheet.cell(row=2, column=header['column'] + 1)
                 if cell.value != header['header']:
                     self.notes = 'El archivo seleccionado no parece ser un catálogo Cabys'
                     self.button_enable = False
@@ -400,26 +398,23 @@ class CabysCatalogImportWizard(models.TransientModel):
             # get Excel file
             excel_file = base64.b64decode(self.cabys_excel_file)
             _logger.info('Loading Cabys catalog from Excel file')
-            # open it as xlrd workbook
-            workbook = open_workbook(file_contents=excel_file)
+            # open it as openpyxl workbook
+            workbook = openpyxl.load_workbook(BytesIO(excel_file))
             _logger.info('workbook %s' % workbook)
             # get first sheet, that's where the data is
-            xl_sheet = workbook.sheet_by_index(0)
-            _logger.info('Sheet %s name %s' % (xl_sheet, xl_sheet.name))
+            xl_sheet = workbook.active
+            _logger.info('Sheet %s name %s' % (xl_sheet, xl_sheet.title))
             # get rows of data from workbook sheet
-            rows = xl_sheet.get_rows()
-            # skip first two header rows
-            rows.__next__()
-            rows.__next__()
+            rows = xl_sheet.iter_rows(min_row=3, values_only=True)
             # here we will process all the records (rows in catalog file)
             products_codes = []
             # iterate over every row
             for row in rows:
                 # get product data
-                code = row[products_map['code']].value
-                cabys_categoria8_id = row[products_map['category']].value
-                name = row[products_map['description']].value
-                tax_data = row[products_map['tax']].value
+                code = row[products_map['code']]
+                cabys_categoria8_id = row[products_map['category']]
+                name = row[products_map['description']]
+                tax_data = row[products_map['tax']]
                 tax_converted = 0.0
                 if isinstance(tax_data, str) and '%' in tax_data:
                     # Remueve el símbolo de porcentaje y luego divide por 100
